@@ -2,6 +2,8 @@ package co.edu.cesde.pps.model;
 
 import co.edu.cesde.pps.enums.CartStatus;
 import co.edu.cesde.pps.util.CalculationUtils;
+import lombok.*;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -68,6 +70,12 @@ import java.util.stream.Collectors;
  * NOTA: Los métodos de gestión bidireccional (addItem, removeItem) fueron movidos
  * a la capa de servicio (CartService) en etapa 05 para mantener el modelo limpio.
  */
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+
 public class Cart {
 
     private Long cartId;
@@ -80,10 +88,6 @@ public class Cart {
     // Colección para relación 1:N
     private List<CartItem> items;
 
-    // Constructor vacío (requerido para JPA futuro)
-    public Cart() {
-        this.items = new ArrayList<>();
-    }
 
     // Constructor para carrito de invitado
     public Cart(UserSession session) {
@@ -105,73 +109,7 @@ public class Cart {
         this.items = new ArrayList<>();
     }
 
-    // Constructor completo (excepto ID y timestamps autogenerados)
-    public Cart(User user, UserSession session, CartStatus status) {
-        this.user = user;
-        this.session = session;
-        this.status = status != null ? status : CartStatus.OPEN;
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-        this.items = new ArrayList<>();
-    }
 
-    // Getters y Setters
-
-    public Long getCartId() {
-        return cartId;
-    }
-
-    public void setCartId(Long cartId) {
-        this.cartId = cartId;
-    }
-
-    public User getUser() {
-        return user;
-    }
-
-    public void setUser(User user) {
-        this.user = user;
-    }
-
-    public UserSession getSession() {
-        return session;
-    }
-
-    public void setSession(UserSession session) {
-        this.session = session;
-    }
-
-    public CartStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(CartStatus status) {
-        this.status = status;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-
-    public List<CartItem> getItems() {
-        return items;
-    }
-
-    public void setItems(List<CartItem> items) {
-        this.items = items;
-    }
 
     // Métodos helper de consulta (sin efectos secundarios)
 
@@ -217,19 +155,4 @@ public class Cart {
 
     // toString sin navegación a objetos relacionados (solo IDs y tamaño de colección)
 
-    @Override
-    public String toString() {
-        return "Cart{" +
-                "cartId=" + cartId +
-                ", userId=" + (user != null ? user.getUserId() : null) +
-                ", sessionId=" + (session != null ? session.getSessionId() : null) +
-                ", status=" + status +
-                ", isGuest=" + isGuestCart() +
-                ", isOpen=" + isOpen() +
-                ", itemsCount=" + (items != null ? items.size() : 0) +
-                ", total=" + calculateTotal() +
-                ", createdAt=" + createdAt +
-                ", updatedAt=" + updatedAt +
-                '}';
-    }
 }
