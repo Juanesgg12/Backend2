@@ -1,8 +1,12 @@
 package co.edu.cesde.pps.model;
 
+import lombok.*;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+
+
 
 /**
  * Entidad Category - Organiza el catálogo en categorías jerárquicas.
@@ -26,6 +30,13 @@ import java.util.Objects;
  * NOTA: Los métodos de gestión bidireccional (addSubcategory, removeSubcategory) fueron movidos
  * a la capa de servicio (CategoryService) en etapa 05 para mantener el modelo limpio.
  */
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+
+
 public class Category {
 
     private Long categoryId;
@@ -34,82 +45,12 @@ public class Category {
     private String slug;
 
     // Colecciones para relaciones 1:N
-    private List<Category> subcategories;
-    private List<Product> products;
+    @Builder.Default
+    private List<Category> subcategories = new ArrayList<>();
+    @Builder.Default
+    private List<Product> products = new ArrayList<>();
 
-    // Constructor vacío (requerido para JPA futuro)
-    public Category() {
-        this.subcategories = new ArrayList<>();
-        this.products = new ArrayList<>();
-    }
 
-    // Constructor para categoría raíz (sin parent)
-    public Category(String name, String slug) {
-        this.parent = null; // Categoría raíz
-        this.name = name;
-        this.slug = slug;
-        this.subcategories = new ArrayList<>();
-        this.products = new ArrayList<>();
-    }
-
-    // Constructor para subcategoría (con parent)
-    public Category(Category parent, String name, String slug) {
-        this.parent = parent;
-        this.name = name;
-        this.slug = slug;
-        this.subcategories = new ArrayList<>();
-        this.products = new ArrayList<>();
-    }
-
-    // Getters y Setters
-
-    public Long getCategoryId() {
-        return categoryId;
-    }
-
-    public void setCategoryId(Long categoryId) {
-        this.categoryId = categoryId;
-    }
-
-    public Category getParent() {
-        return parent;
-    }
-
-    public void setParent(Category parent) {
-        this.parent = parent;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getSlug() {
-        return slug;
-    }
-
-    public void setSlug(String slug) {
-        this.slug = slug;
-    }
-
-    public List<Category> getSubcategories() {
-        return subcategories;
-    }
-
-    public void setSubcategories(List<Category> subcategories) {
-        this.subcategories = subcategories;
-    }
-
-    public List<Product> getProducts() {
-        return products;
-    }
-
-    public void setProducts(List<Product> products) {
-        this.products = products;
-    }
 
     // Métodos helper de consulta (sin efectos secundarios)
 
@@ -135,7 +76,7 @@ public class Category {
         return Objects.hash(categoryId);
     }
 
-    // toString sin navegación a objetos relacionados (solo IDs y tamaño de colecciones)
+    // toString personalizado sin navegación a objetos relacionados (solo IDs y tamaño de colecciones)
 
     @Override
     public String toString() {
@@ -150,3 +91,5 @@ public class Category {
                 '}';
     }
 }
+
+

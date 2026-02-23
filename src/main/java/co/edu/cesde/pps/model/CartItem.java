@@ -48,41 +48,22 @@ public class CartItem {
     private BigDecimal unitPrice;
     private LocalDateTime addedAt;
 
+    // Setters personalizados con validación (override de Lombok)
 
-
-    // Constructor con campos obligatorios
-    public CartItem(Cart cart, Product product, Integer quantity, BigDecimal unitPrice) {
-        this.cart = cart;
-        this.product = product;
+    public void setQuantity(Integer quantity) {
+        ValidationUtils.validatePositive(quantity, "quantity");
         this.quantity = quantity;
-        this.unitPrice = unitPrice;
-        this.addedAt = LocalDateTime.now();
     }
-
-
-
-    public BigDecimal getUnitPrice() {
-        return unitPrice;
-    }
-
     public void setUnitPrice(BigDecimal unitPrice) {
         ValidationUtils.validateNonNegative(unitPrice, "unitPrice");
         this.unitPrice = unitPrice;
     }
 
-    public LocalDateTime getAddedAt() {
-        return addedAt;
-    }
-
-    public void setAddedAt(LocalDateTime addedAt) {
-        this.addedAt = addedAt;
-    }
 
     // Método helper para calcular subtotal del item
     public BigDecimal calculateSubtotal() {
         return CalculationUtils.calculateCartItemSubtotal(unitPrice, quantity);
     }
-
     // equals y hashCode basados en ID
 
     @Override
@@ -98,7 +79,19 @@ public class CartItem {
         return Objects.hash(cartItemId);
     }
 
-    // toString sin navegación a objetos relacionados (solo IDs)
+    // toString personalizado sin navegación a objetos relacionados (solo IDs)
 
+    @Override
+    public String toString() {
+        return "CartItem{" +
+                "cartItemId=" + cartItemId +
+                ", cartId=" + (cart != null ? cart.getCartId() : null) +
+                ", productId=" + (product != null ? product.getProductId() : null) +
+                ", quantity=" + quantity +
+                ", unitPrice=" + unitPrice +
+                ", subtotal=" + calculateSubtotal() +
+                ", addedAt=" + addedAt +
+                '}';
+    }
 
 }
