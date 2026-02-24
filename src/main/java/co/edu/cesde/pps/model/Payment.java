@@ -2,6 +2,8 @@ package co.edu.cesde.pps.model;
 
 import co.edu.cesde.pps.enums.Currency;
 import co.edu.cesde.pps.util.ValidationUtils;
+
+import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -36,6 +38,11 @@ import java.util.Objects;
  * - N:1 con PaymentMethod (muchos pagos usan un método)
  * - N:1 con PaymentStatus (muchos pagos tienen un estado)
  */
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Payment {
 
     private Long paymentId;
@@ -47,99 +54,12 @@ public class Payment {
     private String providerReference;
     private LocalDateTime paidAt;
 
-    // Constructor vacío (requerido para JPA futuro)
-    public Payment() {
-    }
-
-    // Constructor con campos obligatorios (paidAt NULL para pending)
-    public Payment(Order order, PaymentMethod paymentMethod, PaymentStatus paymentStatus,
-                   BigDecimal amount, Currency currency) {
-        this.order = order;
-        this.paymentMethod = paymentMethod;
-        this.paymentStatus = paymentStatus;
-        this.amount = amount;
-        this.currency = currency;
-        this.paidAt = null; // Se establece cuando el pago se completa
-    }
-
-    // Constructor completo (excepto ID autogenerado)
-    public Payment(Order order, PaymentMethod paymentMethod, PaymentStatus paymentStatus,
-                   BigDecimal amount, Currency currency, String providerReference, LocalDateTime paidAt) {
-        this.order = order;
-        this.paymentMethod = paymentMethod;
-        this.paymentStatus = paymentStatus;
-        this.amount = amount;
-        this.currency = currency;
-        this.providerReference = providerReference;
-        this.paidAt = paidAt;
-    }
-
-    // Getters y Setters
-
-    public Long getPaymentId() {
-        return paymentId;
-    }
-
-    public void setPaymentId(Long paymentId) {
-        this.paymentId = paymentId;
-    }
-
-    public Order getOrder() {
-        return order;
-    }
-
-    public void setOrder(Order order) {
-        this.order = order;
-    }
-
-    public PaymentMethod getPaymentMethod() {
-        return paymentMethod;
-    }
-
-    public void setPaymentMethod(PaymentMethod paymentMethod) {
-        this.paymentMethod = paymentMethod;
-    }
-
-    public PaymentStatus getPaymentStatus() {
-        return paymentStatus;
-    }
-
-    public void setPaymentStatus(PaymentStatus paymentStatus) {
-        this.paymentStatus = paymentStatus;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
+    // Setter personalizado con validación (override de Lombok)
 
     public void setAmount(BigDecimal amount) {
         // Validación: amount puede ser negativo (reembolsos), pero no null
         ValidationUtils.validateNotNull(amount, "amount");
         this.amount = amount;
-    }
-
-    public Currency getCurrency() {
-        return currency;
-    }
-
-    public void setCurrency(Currency currency) {
-        this.currency = currency;
-    }
-
-    public String getProviderReference() {
-        return providerReference;
-    }
-
-    public void setProviderReference(String providerReference) {
-        this.providerReference = providerReference;
-    }
-
-    public LocalDateTime getPaidAt() {
-        return paidAt;
-    }
-
-    public void setPaidAt(LocalDateTime paidAt) {
-        this.paidAt = paidAt;
     }
 
     // Método helper para verificar si el pago está completado

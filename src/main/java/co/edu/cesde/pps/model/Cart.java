@@ -81,61 +81,30 @@ public class Cart {
     private Long cartId;
     private User user; // Nullable - NULL para invitados
     private UserSession session;
-    private CartStatus status;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    @Builder.Default
+    private CartStatus status = CartStatus.OPEN; // Por defecto OPEN al crear
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now(); // Se asigna al crear
+    @Builder.Default
+    private LocalDateTime updatedAt = LocalDateTime.now(); // Se actualiza al modificar
 
     // Colección para relación 1:N
-    private List<CartItem> items;
-
-
-    // Constructor para carrito de invitado
-    public Cart(UserSession session) {
-        this.user = null; // Invitado
-        this.session = session;
-        this.status = CartStatus.OPEN;
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-        this.items = new ArrayList<>();
-    }
-
-    // Constructor para carrito de usuario registrado
-    public Cart(User user, UserSession session) {
-        this.user = user;
-        this.session = session;
-        this.status = CartStatus.OPEN;
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-        this.items = new ArrayList<>();
-    }
+    @Builder.Default
+    private List<CartItem> items = new ArrayList<>();
 
 
 
-    // Métodos helper de consulta (sin efectos secundarios)
-
-    /**
-     * Verifica si es carrito de invitado
-     */
-    public boolean isGuestCart() {
-        return user == null;
-    }
-
-    /**
-     * Verifica si el carrito está activo
-     */
-    public boolean isOpen() {
-        return status == CartStatus.OPEN;
-    }
-
-    /**
-     * Calcula el total del carrito sumando todos los items
-     * Delegado a CalculationUtils para centralizar lógica de cálculo
-     */
+    // Método helper para calcular total del carrito
     public BigDecimal calculateTotal() {
         List<BigDecimal> subtotals = items.stream()
-            .map(CartItem::calculateSubtotal)
-            .collect(Collectors.toList());
+                .map(CartItem::calculateSubtotal)
+                .collect(Collectors.toList());
         return CalculationUtils.calculateCartTotal(subtotals);
+    }
+
+    // Método helper para verificar si el carrito está abierto
+    public boolean isOpen() {
+        return status == CartStatus.OPEN;
     }
 
     // equals y hashCode basados en ID
@@ -153,6 +122,22 @@ public class Cart {
         return Objects.hash(cartId);
     }
 
-    // toString sin navegación a objetos relacionados (solo IDs y tamaño de colección)
+    // toString personalizado sin navegación a objetos relacionados (solo IDs y tamaño de colección)
 
+    @Override
+    public String toString() {
+        return "Cart{" +
+                "cartId=" + cartId +
+                ", userId=" + (user != null ? user.getUserId() : null) +
+                ", sessionId=" + (session != null ? session.getSessionId() : null) +
+                ", status=" + status +
+                ", createdAt=" + createdAt +
+                ", updatedAt=" + updatedAt +
+                ", itemsCount=" + (items != null ? items.size() : 0) +
+                ", total=" + calculateTotal() +
+                '}';
+    }
 }
+
+
+

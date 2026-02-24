@@ -1,10 +1,10 @@
 package co.edu.cesde.pps.model;
 
 import co.edu.cesde.pps.enums.AddressType;
-import java.util.Objects;
-import lombok.Getter;
-import lombok.Setter;
+
 import lombok.*;
+import java.util.Objects;
+
 
 
 
@@ -49,27 +49,8 @@ public class Address {
     private String state;
     private String country;
     private String postalCode;
-    private Boolean isDefault;
-
-
-    // Constructor con campos obligatorios
-    public Address(User user, AddressType type, String line1, String city,
-                   String state, String country, String postalCode) {
-        this.user = user;
-        this.type = type;
-        this.line1 = line1;
-        this.city = city;
-        this.state = state;
-        this.country = country;
-        this.postalCode = postalCode;
-        this.isDefault = false;
-    }
-
-
-
-    // Getters y Setters
-
-
+    @Builder.Default
+    private Boolean isDefault = false;
     // equals y hashCode basados en ID
 
     @Override
@@ -85,7 +66,25 @@ public class Address {
         return Objects.hash(addressId);
     }
 
-    // toString sin navegación a objetos relacionados (solo IDs)
+    // toString personalizado sin navegación a objetos relacionados (solo IDs)
 
-
+    @Override
+    public String toString() {
+        return "Address{" +
+                "addressId=" + addressId +
+                ", userId=" + (user != null ? user.getUserId() : null) +
+                ", type=" + type +
+                ", line1='" + line1 + '\'' +
+                ", line2='" + line2 + '\'' +
+                ", city='" + city + '\'' +
+                ", state='" + state + '\'' +
+                ", country='" + country + '\'' +
+                ", postalCode='" + postalCode + '\'' +
+                ", isDefault=" + isDefault +
+                '}';
+    }
 }
+
+
+
+

@@ -1,5 +1,6 @@
 package co.edu.cesde.pps.model;
 
+import lombok.*;
 import java.util.Objects;
 
 /**
@@ -14,37 +15,15 @@ import java.util.Objects;
  * Relaciones (futuro - etapa02):
  * - 1:N con Payment (un método puede usarse en múltiples pagos)
  */
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class PaymentMethod {
 
     private Long paymentMethodId;
     private String name;
-
-    // Constructor vacío (requerido para JPA futuro)
-    public PaymentMethod() {
-    }
-
-    // Constructor con campos obligatorios
-    public PaymentMethod(String name) {
-        this.name = name;
-    }
-
-    // Getters y Setters
-
-    public Long getPaymentMethodId() {
-        return paymentMethodId;
-    }
-
-    public void setPaymentMethodId(Long paymentMethodId) {
-        this.paymentMethodId = paymentMethodId;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
 
     // equals y hashCode basados en ID
 
