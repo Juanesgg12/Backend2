@@ -19,7 +19,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Servicio para gestión de carritos de compra.
@@ -182,8 +181,12 @@ public class CartService {
             existingItem.setQuantity(newQuantity);
         } else {
             // Producto nuevo: crear CartItem y gestión bidireccional
-            CartItem newItem = new CartItem(cart, product, quantity, product.getPrice());
+            CartItem newItem = new CartItem();
             newItem.setCartItemId(generateNextCartItemId());
+            newItem.setCart(cart);
+            newItem.setProduct(product);
+            newItem.setQuantity(quantity);
+            newItem.setUnitPrice(product.getPrice());
             newItem.setAddedAt(LocalDateTime.now());
 
             cart.getItems().add(newItem);      // Agregar a colección del carrito
@@ -391,9 +394,12 @@ public class CartService {
                 }
 
                 // Crear nuevo item en carrito de usuario
-                CartItem newItem = new CartItem(userCart, product, guestQuantity,
-                    guestItem.getUnitPrice());
+                CartItem newItem = new CartItem();
                 newItem.setCartItemId(generateNextCartItemId());
+                newItem.setCart(userCart);
+                newItem.setProduct(product);
+                newItem.setQuantity(guestQuantity);
+                newItem.setUnitPrice(guestItem.getUnitPrice());
                 newItem.setAddedAt(guestItem.getAddedAt());
 
                 // Gestión bidireccional

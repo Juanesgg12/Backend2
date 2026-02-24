@@ -1,6 +1,7 @@
 package co.edu.cesde.pps.model;
 
 import lombok.*;
+import jakarta.persistence.*;
 import java.util.Objects;
 
 /**
@@ -15,14 +16,19 @@ import java.util.Objects;
  * Relaciones (futuro - etapa02):
  * - 1:N con Payment (un método puede usarse en múltiples pagos)
  */
+@Entity
+@Table(name = "payment_methods")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class PaymentMethod {
-
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "payment_method_id")
     private Long paymentMethodId;
+    @Column(unique = true, nullable = false, length = 50)
     private String name;
 
     // equals y hashCode basados en ID

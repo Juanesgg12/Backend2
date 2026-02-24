@@ -76,9 +76,13 @@ public class UserService {
         defaultRole.setRoleId(2L); // CUSTOMER
         defaultRole.setName("CUSTOMER");
 
-        User user = new User(defaultRole, email.toLowerCase().trim(), passwordHash,
-                            firstName.trim(), lastName.trim());
+        User user = new User();
         user.setUserId(generateNextId()); // Simula auto-increment
+        user.setRole(defaultRole);
+        user.setEmail(email.toLowerCase().trim());
+        user.setPasswordHash(passwordHash);
+        user.setFirstName(firstName.trim());
+        user.setLastName(lastName.trim());
         user.setPhone(phone != null ? phone.trim() : null);
         user.setStatus(UserStatus.ACTIVE);
         user.setCreatedAt(LocalDateTime.now());

@@ -4,11 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.util.Objects;
 
-/**
- * Entidad OrderStatus - Catálogo de estados posibles de una orden.
- *
- * Ejemplos: pending, paid, shipped, delivered, cancelled
- */
 @Entity
 @Table(name = "order_status")
 @Getter
@@ -20,16 +15,15 @@ public class OrderStatus {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name= "order_status_id")
+    @Column(name = "order_status_id")
     private Long orderStatusId;
 
-    @Column(name= "name", nullable = false, unique = true, length = 50)
+    @Column(name = "name", nullable = false, unique = true, length = 50)
     private String name;
 
-    @Column(name= "description", length = 255)
+    @Column(name = "description", length = 255)
     private String description;
 
-    // equals y hashCode basados en ID
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

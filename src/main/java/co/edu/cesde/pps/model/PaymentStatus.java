@@ -1,6 +1,7 @@
 package co.edu.cesde.pps.model;
 
 import lombok.*;
+import jakarta.persistence.*;
 import java.util.Objects;
 
 /**
@@ -15,14 +16,19 @@ import java.util.Objects;
  * Relaciones (futuro - etapa02):
  * - 1:N con Payment (un estado puede aplicar a múltiples pagos)
  */
+@Entity
+@Table(name = "payment_statuses")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class PaymentStatus {
-
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "payment_status_id")
     private Long paymentStatusId;
+    @Column(unique = true, nullable = false, length = 50)
     private String name;
 
 

@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import lombok.*;
+import jakarta.persistence.*;
 
 
 /**
@@ -44,6 +45,9 @@ import lombok.*;
  * - 1:N con OrderItem (items de la orden)
  * - 1:N con Payment (pagos asociados, puede haber reintentos)
  */
+@Entity
+@Table (name = "orders")
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -51,25 +55,46 @@ import lombok.*;
 @Builder
 
 public class Order {
-
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "order_id")
     private Long orderId;
+    @Column(name = "order_number", unique = true, nullable = false, length = 50)
     private String orderNumber;
-    private Long userId; // NOT NULL - checkout requiere usuario registrado
-    private Long orderStatusId;
-    private Long shippingAddressId;
-    private Long billingAddressId;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "order_status_id", nullable = false)
+    private OrderStatus orderStatus;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "shipping_address_id", nullable = false)
+    private Address shippingAddress;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "billing_address_id", nullable = false)
+    private Address billingAddress;
+    @Column(nullable = false, precision = 10, scale = 2)
     @Builder.Default
     private BigDecimal subtotal = BigDecimal.ZERO;
+    @Column(nullable = false, precision = 10, scale = 2)
     @Builder.Default
     private BigDecimal tax = BigDecimal.ZERO;
+    @Column(nullable = false, precision = 10, scale = 2)
     @Builder.Default
     private BigDecimal shippingCost = BigDecimal.ZERO;
+    @Column(nullable = false, precision = 10, scale = 2)
     @Builder.Default
     private BigDecimal total = BigDecimal.ZERO;
+    @Column(nullable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
     // Colección para relación 1:N con OrderItem
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();
 
@@ -124,10 +149,10 @@ public class Order {
         return "Order{" +
                 "orderId=" + orderId +
                 ", orderNumber='" + orderNumber + '\'' +
-                ", userId=" + userId +
-                ", orderStatusId=" + orderStatusId +
-                ", shippingAddressId=" + shippingAddressId +
-                ", billingAddressId=" + billingAddressId +
+                ", userId=" + (user != null ? user.getUserId() : null) +
+                ", orderStatusId=" + (orderStatus != null ? orderStatus.getOrderStatusId() : null) +
+                ", shippingAddressId=" + (shippingAddress != null ? shippingAddress.getAddressId() : null) +
+                ", billingAddressId=" + (billingAddress != null ? billingAddress.getAddressId() : null) +
                 ", subtotal=" + subtotal +
                 ", tax=" + tax +
                 ", shippingCost=" + shippingCost +

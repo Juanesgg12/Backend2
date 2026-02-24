@@ -141,19 +141,23 @@ public class OrderService {
 
         // 5. Crear orden con número único
         String orderNumber = generateOrderNumber();
-        Order order = new Order(orderNumber, userId, 1L, // TODO: orderStatusId = PENDING
-            shippingAddressId, billingAddressId);
+        Order order = new Order();
         order.setOrderId(generateNextId());
+        order.setOrderNumber(orderNumber);
+        order.setUser(cart.getUser());
+        order.setShippingAddress(shippingAddress);
+        order.setBillingAddress(billingAddress);
+        // orderStatus se asigna en servicio (TODO Etapa 06)
+        order.setCreatedAt(LocalDateTime.now());
 
         // 6. Copiar items del carrito a la orden (congelar precios históricos)
         for (CartItem cartItem : cart.getItems()) {
-            OrderItem orderItem = new OrderItem(
-                order,
-                cartItem.getProduct(),
-                cartItem.getQuantity(),
-                cartItem.getUnitPrice()  // Precio histórico al momento de compra
-            );
+            OrderItem orderItem = new OrderItem();
             orderItem.setOrderItemId(generateNextOrderItemId());
+            orderItem.setOrder(order);
+            orderItem.setProduct(cartItem.getProduct());
+            orderItem.setQuantity(cartItem.getQuantity());
+            orderItem.setUnitPrice(cartItem.getUnitPrice());  // Precio histórico al momento de compra
 
             // Calcular lineTotal
             orderItem.setLineTotal(CalculationUtils.calculateOrderItemLineTotal(
@@ -237,7 +241,7 @@ public class OrderService {
 
         // TODO Etapa 06: List<Order> orders = orderRepository.findByUserId(userId);
         List<Order> userOrders = ordersInMemory.stream()
-                .filter(o -> o.getUserId().equals(userId))
+                .filter(o -> o.getUser() != null && o.getUser().getUserId().equals(userId))
                 .collect(Collectors.toList());
 
         return orderMapper.toDTOList(userOrders);
@@ -252,7 +256,7 @@ public class OrderService {
     public List<OrderDTO> findOrdersByStatus(Long statusId) {
         // TODO Etapa 06: List<Order> orders = orderRepository.findByOrderStatusId(statusId);
         List<Order> statusOrders = ordersInMemory.stream()
-                .filter(o -> o.getOrderStatusId().equals(statusId))
+                .filter(o -> o.getOrderStatus() != null && o.getOrderStatus().getOrderStatusId().equals(statusId))
                 .collect(Collectors.toList());
 
         return orderMapper.toDTOList(statusOrders);

@@ -3,6 +3,7 @@ package co.edu.cesde.pps.model;
 import co.edu.cesde.pps.util.CalculationUtils;
 import co.edu.cesde.pps.util.ValidationUtils;
 import lombok.*;
+import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,19 +35,32 @@ import java.util.Objects;
  * - N:1 con Cart (muchos items pertenecen a un carrito)
  * - N:1 con Product (muchos items referencian a un producto)
  */
+@Entity
+@Table (name = "cart_items" , uniqueConstraints = {@UniqueConstraint(columnNames = {"cart_id", "product_id"})})
+
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class CartItem {
-
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "cart_item_id")
     private Long cartItemId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "cart_id", nullable = false)
     private Cart cart;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "product_id", nullable = false)
     private Product product;
+    @Column(nullable = false)
     private Integer quantity;
+    @Column(name = "unit_price", nullable = false, precision = 10, scale = 2)
     private BigDecimal unitPrice;
-    private LocalDateTime addedAt;
+    @Column(name = "added_at", nullable = false)
+    @Builder.Default
+    private LocalDateTime addedAt = LocalDateTime.now();
 
     // Setters personalizados con validación (override de Lombok)
 

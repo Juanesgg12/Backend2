@@ -4,6 +4,7 @@ import co.edu.cesde.pps.util.CalculationUtils;
 import co.edu.cesde.pps.util.ValidationUtils;
 
 import lombok.*;
+import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.util.Objects;
 
@@ -38,6 +39,9 @@ import java.util.Objects;
  * - N:1 con Order (muchos items pertenecen a una orden)
  * - N:1 con Product (muchos items referencian a un producto)
  */
+@Entity
+@Table(name = "order_items")
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -45,11 +49,26 @@ import java.util.Objects;
 @Builder
 public class OrderItem {
 
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "order_item_id")
     private Long orderItemId;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "order_id", nullable = false)
     private Order order;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "product_id", nullable = false)
     private Product product;
+
+    @Column(nullable = false)
     private Integer quantity;
+
+    @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal unitPrice;
+
+    @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal lineTotal;
 
 

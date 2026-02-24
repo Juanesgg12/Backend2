@@ -3,6 +3,7 @@ package co.edu.cesde.pps.model;
 import co.edu.cesde.pps.enums.AddressType;
 
 import lombok.*;
+import jakarta.persistence.*;
 import java.util.Objects;
 
 
@@ -30,6 +31,9 @@ import java.util.Objects;
  * - N:1 con User (muchas direcciones pertenecen a un usuario)
  * - 1:N con Order (como shipping_address_id o billing_address_id)
  */
+@Entity
+@Table(name = "addresses")
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -37,18 +41,39 @@ import java.util.Objects;
 @Builder
 
 
-
 public class Address {
 
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "address_id")
     private Long addressId;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private AddressType type;
+
+    @Column(nullable = false)
     private String line1;
+
     private String line2;
+
+    @Column(nullable = false)
     private String city;
+
+    @Column(nullable = false)
     private String state;
+
+    @Column(nullable = false)
     private String country;
+
+    @Column(name = "postal_code", nullable = false)
     private String postalCode;
+
+    @Column(name = "is_default")
     @Builder.Default
     private Boolean isDefault = false;
     // equals y hashCode basados en ID

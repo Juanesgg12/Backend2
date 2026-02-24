@@ -3,6 +3,7 @@ package co.edu.cesde.pps.model;
 import co.edu.cesde.pps.enums.UserStatus;
 
 import lombok.*;
+import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,26 +37,42 @@ import java.util.Objects;
  * NOTA: Los métodos de gestión bidireccional (addAddress, removeAddress) fueron movidos
  * a la capa de servicio (UserService) en etapa 05 para mantener el modelo limpio.
  */
+@Entity
+@Table (name = "users")
+
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class User {
 
+
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "user_id")
     private Long userId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "role_id", nullable = false)
     private Role role;
+    @Column(unique = true, nullable = false)
     private String email;
+    @Column(name = "password_hash", nullable = false)
     private String passwordHash;
+    @Column(name = "first_name", nullable = false)
     private String firstName;
+    @Column(name = "last_name", nullable = false)
     private String lastName;
     private String phone;
-    @Builder.Default
-    private UserStatus status = UserStatus.ACTIVE; // Por defecto activo al crear
-    @Builder.Default
-    private LocalDateTime createdAt = LocalDateTime.now(); // Se asigna al crear
+    @Enumerated(EnumType.STRING)
+    private UserStatus status = UserStatus.ACTIVE;// Por defecto activo al crear
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
 
     // Colecciones para relaciones 1:N
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+
     @Builder.Default
     private List<Address> addresses = new ArrayList<>();
 

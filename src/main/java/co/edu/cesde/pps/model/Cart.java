@@ -3,6 +3,7 @@ package co.edu.cesde.pps.model;
 import co.edu.cesde.pps.enums.CartStatus;
 import co.edu.cesde.pps.util.CalculationUtils;
 import lombok.*;
+import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -70,6 +71,9 @@ import java.util.stream.Collectors;
  * NOTA: Los métodos de gestión bidireccional (addItem, removeItem) fueron movidos
  * a la capa de servicio (CartService) en etapa 05 para mantener el modelo limpio.
  */
+@Entity
+@Table(name = "cart")
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -77,18 +81,29 @@ import java.util.stream.Collectors;
 @Builder
 
 public class Cart {
-
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "cart_id")
     private Long cartId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = true )
     private User user; // Nullable - NULL para invitados
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "session_id", nullable = false)
     private UserSession session;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     @Builder.Default
     private CartStatus status = CartStatus.OPEN; // Por defecto OPEN al crear
+    @Column(name = "created_at", nullable = false)
     @Builder.Default
-    private LocalDateTime createdAt = LocalDateTime.now(); // Se asigna al crear
+    private LocalDateTime createdAt = LocalDateTime.now();// Se asigna al crear
+    @Column(name = "updated_at", nullable = false)
     @Builder.Default
     private LocalDateTime updatedAt = LocalDateTime.now(); // Se actualiza al modificar
 
     // Colección para relación 1:N
+    @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<CartItem> items = new ArrayList<>();
 
@@ -105,6 +120,11 @@ public class Cart {
     // Método helper para verificar si el carrito está abierto
     public boolean isOpen() {
         return status == CartStatus.OPEN;
+    }
+
+    // Método helper para verificar si es un carrito de invitado
+    public boolean isGuestCart() {
+        return user == null;
     }
 
     // equals y hashCode basados en ID
