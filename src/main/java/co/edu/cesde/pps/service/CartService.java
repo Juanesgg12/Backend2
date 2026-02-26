@@ -119,8 +119,8 @@ public class CartService {
         // TODO Etapa 06: Optional<Cart> cart = cartRepository.findByUserIdAndStatus(userId, CartStatus.OPEN);
         Cart cart = cartsInMemory.stream()
                 .filter(c -> c.getUser() != null &&
-                           c.getUser().getUserId().equals(userId) &&
-                           c.getStatus() == CartStatus.OPEN)
+                        c.getUser().getUserId().equals(userId) &&
+                        c.getStatus() == CartStatus.OPEN)
                 .findFirst()
                 .orElse(null);
 
@@ -147,7 +147,7 @@ public class CartService {
         Cart cart = findCartEntityOrThrow(cartId);
         if (cart.getStatus() != CartStatus.OPEN) {
             throw new InvalidCartStateException(cartId, cart.getStatus(),
-                CartStatus.OPEN, "add item");
+                    CartStatus.OPEN, "add item");
         }
 
         // Obtener producto y validar disponibilidad
@@ -159,7 +159,7 @@ public class CartService {
         // Validar stock disponible
         if (!CalculationUtils.hasEnoughStock(product.getStockQty(), quantity)) {
             throw new InsufficientStockException(productId, product.getSku(),
-                quantity, product.getStockQty());
+                    quantity, product.getStockQty());
         }
 
         // Buscar si el producto ya existe en el carrito
@@ -175,7 +175,7 @@ public class CartService {
             // Validar stock para nueva cantidad
             if (!CalculationUtils.hasEnoughStock(product.getStockQty(), newQuantity)) {
                 throw new InsufficientStockException(productId, product.getSku(),
-                    newQuantity, product.getStockQty());
+                        newQuantity, product.getStockQty());
             }
 
             existingItem.setQuantity(newQuantity);
@@ -219,7 +219,7 @@ public class CartService {
         Cart cart = findCartEntityOrThrow(cartId);
         if (cart.getStatus() != CartStatus.OPEN) {
             throw new InvalidCartStateException(cartId, cart.getStatus(),
-                CartStatus.OPEN, "update item");
+                    CartStatus.OPEN, "update item");
         }
 
         // Buscar item en el carrito
@@ -232,7 +232,7 @@ public class CartService {
         Product product = item.getProduct();
         if (!CalculationUtils.hasEnoughStock(product.getStockQty(), newQuantity)) {
             throw new InsufficientStockException(productId, product.getSku(),
-                newQuantity, product.getStockQty());
+                    newQuantity, product.getStockQty());
         }
 
         item.setQuantity(newQuantity);
@@ -257,7 +257,7 @@ public class CartService {
         Cart cart = findCartEntityOrThrow(cartId);
         if (cart.getStatus() != CartStatus.OPEN) {
             throw new InvalidCartStateException(cartId, cart.getStatus(),
-                CartStatus.OPEN, "remove item");
+                    CartStatus.OPEN, "remove item");
         }
 
         // Buscar item
@@ -288,7 +288,7 @@ public class CartService {
         Cart cart = findCartEntityOrThrow(cartId);
         if (cart.getStatus() != CartStatus.OPEN) {
             throw new InvalidCartStateException(cartId, cart.getStatus(),
-                CartStatus.OPEN, "clear");
+                    CartStatus.OPEN, "clear");
         }
 
         cart.getItems().clear();
@@ -344,17 +344,17 @@ public class CartService {
         // 2. Validar estados
         if (guestCart.getStatus() != CartStatus.OPEN) {
             throw new InvalidCartStateException(guestCartId, guestCart.getStatus(),
-                CartStatus.OPEN, "merge");
+                    CartStatus.OPEN, "merge");
         }
         if (userCart.getStatus() != CartStatus.OPEN) {
             throw new InvalidCartStateException(userCart.getCartId(),
-                userCart.getStatus(), CartStatus.OPEN, "merge");
+                    userCart.getStatus(), CartStatus.OPEN, "merge");
         }
 
         // 3. Validar que guestCart sea realmente de invitado
         if (guestCart.getUser() != null) {
             throw new CartMergeException(guestCartId, userCart.getCartId(),
-                "Guest cart already has a user assigned");
+                    "Guest cart already has a user assigned");
         }
 
         // 4. Fusionar items del carrito invitado al carrito usuario
@@ -365,7 +365,7 @@ public class CartService {
             // Buscar si el producto ya existe en carrito de usuario
             CartItem userItem = userCart.getItems().stream()
                     .filter(item -> item.getProduct().getProductId()
-                        .equals(product.getProductId()))
+                            .equals(product.getProductId()))
                     .findFirst()
                     .orElse(null);
 
@@ -376,7 +376,7 @@ public class CartService {
                 // Validar stock para cantidad fusionada
                 if (!CalculationUtils.hasEnoughStock(product.getStockQty(), totalQuantity)) {
                     throw new InsufficientStockException(product.getProductId(),
-                        product.getSku(), totalQuantity, product.getStockQty());
+                            product.getSku(), totalQuantity, product.getStockQty());
                 }
 
                 userItem.setQuantity(totalQuantity);
@@ -390,7 +390,7 @@ public class CartService {
                 // Validar stock disponible
                 if (!CalculationUtils.hasEnoughStock(product.getStockQty(), guestQuantity)) {
                     throw new InsufficientStockException(product.getProductId(),
-                        product.getSku(), guestQuantity, product.getStockQty());
+                            product.getSku(), guestQuantity, product.getStockQty());
                 }
 
                 // Crear nuevo item en carrito de usuario
@@ -469,8 +469,8 @@ public class CartService {
         // Buscar carrito OPEN existente
         Cart cart = cartsInMemory.stream()
                 .filter(c -> c.getUser() != null &&
-                           c.getUser().getUserId().equals(userId) &&
-                           c.getStatus() == CartStatus.OPEN)
+                        c.getUser().getUserId().equals(userId) &&
+                        c.getStatus() == CartStatus.OPEN)
                 .findFirst()
                 .orElse(null);
 
@@ -512,3 +512,4 @@ public class CartService {
                 .orElse(0L) + 1;
     }
 }
+
