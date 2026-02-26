@@ -33,13 +33,11 @@ import java.util.Objects;
  */
 @Entity
 @Table(name = "addresses")
-
 @Getter
 @Setter
 @NoArgsConstructor
-@AllArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Builder
-
 
 public class Address {
 
