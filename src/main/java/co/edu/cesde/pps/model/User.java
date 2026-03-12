@@ -2,12 +2,14 @@ package co.edu.cesde.pps.model;
 
 import co.edu.cesde.pps.enums.UserStatus;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import lombok.*;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 /**
  * Entidad User - Representa un usuario registrado del sistema.
@@ -71,8 +73,8 @@ public class User {
     private LocalDateTime createdAt;
 
     // Colecciones para relaciones 1:N
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true,fetch = FetchType.LAZY)
+    @JsonManagedReference
     @Builder.Default
     private List<Address> addresses = new ArrayList<>();
 
