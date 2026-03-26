@@ -1,4 +1,7 @@
 package co.edu.cesde.pps.repository;
 
-public interface RoleRepository {
+import co.edu.cesde.pps.model.Role;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface RoleRepository extends JpaRepository<Role, Long> {
 }

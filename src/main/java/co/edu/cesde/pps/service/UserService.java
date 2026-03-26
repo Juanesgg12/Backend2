@@ -6,24 +6,32 @@ import co.edu.cesde.pps.exception.EntityNotFoundException;
 import co.edu.cesde.pps.mapper.UserMapper;
 import co.edu.cesde.pps.model.Role;
 import co.edu.cesde.pps.model.User;
+import co.edu.cesde.pps.repository.RoleRepository;
+import co.edu.cesde.pps.repository.UserRepository;
 import co.edu.cesde.pps.util.ValidationUtils;
 import co.edu.cesde.pps.config.AppConfig;
 import co.edu.cesde.pps.enums.UserStatus;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
+@Service
+@Transactional(readOnly = true)
 public class UserService {
 
     private final UserMapper userMapper;
-    private final List<User> usersInMemory;
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
 
-    public UserService() {
+    public UserService(UserRepository userRepository, RoleRepository roleRepository) {
         this.userMapper = new UserMapper();
-        this.usersInMemory = new ArrayList<>();
+        this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
     }
 
+    @Transactional
     public UserDTO registerUser(String email, String passwordHash, String firstName,
                                 String lastName, String phone) {
 
@@ -41,15 +49,12 @@ public class UserService {
             throw new DuplicateEntityException("User", "email", email);
         }
 
-        // Crear rol por defecto
-        Role defaultRole = Role.builder()
-                .roleId(2L)
-                .name("CUSTOMER")
-                .build();
+        // Obtener rol por defecto (CUSTOMER con roleId = 2)
+        Role defaultRole = roleRepository.findById(2L)
+                .orElseThrow(() -> new EntityNotFoundException("Role", 2L));
 
         // Crear usuario con Builder
         User user = User.builder()
-                .userId(generateNextId())
                 .role(defaultRole)
                 .email(email.toLowerCase().trim())
                 .passwordHash(passwordHash)
@@ -60,7 +65,8 @@ public class UserService {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        usersInMemory.add(user);
+        // Guardar en la base de datos
+        user = userRepository.save(user);
 
         return userMapper.toDTO(user);
     }
@@ -71,18 +77,17 @@ public class UserService {
     }
 
     public UserDTO findByEmail(String email) {
-        User user = usersInMemory.stream()
-                .filter(u -> u.getEmail().equalsIgnoreCase(email))
-                .findFirst()
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new EntityNotFoundException("User with email: " + email));
 
         return userMapper.toDTO(user);
     }
 
     public List<UserDTO> findAllUsers() {
-        return userMapper.toDTOList(usersInMemory);
+        return userMapper.toDTOList(userRepository.findAll());
     }
 
+    @Transactional
     public UserDTO updateProfile(Long userId, String firstName, String lastName, String phone) {
 
         User user = findUserEntityOrThrow(userId);
@@ -106,30 +111,25 @@ public class UserService {
             }
         }
 
+        // Guardar cambios en la base de datos
+        user = userRepository.save(user);
         return userMapper.toDTO(user);
     }
 
+    @Transactional
     public void deleteUser(Long userId) {
         User user = findUserEntityOrThrow(userId);
         user.setStatus(UserStatus.INACTIVE);
+        userRepository.save(user);
     }
 
     public boolean existsByEmail(String email) {
-        return usersInMemory.stream()
-                .anyMatch(u -> u.getEmail().equalsIgnoreCase(email));
+        return userRepository.existsByEmailIgnoreCase(email);
     }
 
     public User findUserEntityOrThrow(Long userId) {
-        return usersInMemory.stream()
-                .filter(u -> u.getUserId().equals(userId))
-                .findFirst()
+        return userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User", userId));
     }
 
-    private Long generateNextId() {
-        return usersInMemory.stream()
-                .mapToLong(User::getUserId)
-                .max()
-                .orElse(0L) + 1;
-    }
 }

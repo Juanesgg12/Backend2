@@ -3,6 +3,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import co.edu.cesde.pps.model.User;
 import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByEmail(String email);
     boolean existsByEmailIgnoreCase(String email);
-    Optional<User>FindByEmail(String email);
 }
