@@ -6,369 +6,187 @@ import co.edu.cesde.pps.exception.EntityNotFoundException;
 import co.edu.cesde.pps.exception.ValidationException;
 import co.edu.cesde.pps.mapper.CategoryMapper;
 import co.edu.cesde.pps.model.Category;
+import co.edu.cesde.pps.repository.CategoryRepository;
 import co.edu.cesde.pps.util.StringUtils;
 import co.edu.cesde.pps.util.ValidationUtils;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
-/**
- * Servicio para gestión de categorías.
- *
- * Responsabilidades:
- * - CRUD de categorías
- * - Gestión de jerarquía (addSubcategory, removeSubcategory)
- * - Construcción de árbol de categorías
- * - Validación de slug único
- * - Validación de relaciones padre-hijo
- * - Conversión Entity <-> DTO
- *
- * NOTA: En Etapa 06 se agregará:
- * - @Service annotation
- * - @Transactional
- * - Inyección de CategoryRepository
- * - Persistencia real
- */
+// @Service le dice a Spring que esta clase es un bean de servicio.
+// Spring la registra y la puede inyectar en otros componentes con @Autowired
+// o por constructor (que es la forma recomendada).
+@Service
+// @Transactional(readOnly = true) significa que por defecto todos los métodos
+// de esta clase abren una transacción de solo lectura.
+// Esto le dice a la base de datos "no voy a modificar nada" → mejor rendimiento.
+// Los métodos que SÍ modifican datos sobreescriben esto con @Transactional propio.
+@Transactional(readOnly = true)
 public class CategoryService {
 
     private final CategoryMapper categoryMapper;
-    // TODO Etapa 06: private final CategoryRepository categoryRepository;
-    private final List<Category> categoriesInMemory;
+    private final CategoryRepository categoryRepository;
 
-    public CategoryService() {
+    // Inyección por constructor: Spring detecta que CategoryRepository es un
+    // bean (porque extiende JpaRepository) y lo inyecta automáticamente aquí.
+    public CategoryService(CategoryRepository categoryRepository) {
         this.categoryMapper = new CategoryMapper();
-        this.categoriesInMemory = new ArrayList<>();
+        this.categoryRepository = categoryRepository;
     }
 
-    /**
-     * Crea una nueva categoría.
-     *
-     * @param categoryDTO Datos de la categoría
-     * @return CategoryDTO de la categoría creada
-     * @throws DuplicateEntityException si el slug ya existe
-     */
+    @Transactional  // Sobreescribe readOnly=true porque aquí sí guardamos datos
     public CategoryDTO createCategory(CategoryDTO categoryDTO) {
-        // Validaciones
         ValidationUtils.validateNotBlank(categoryDTO.getName(), "name");
 
-        // Generar slug si no existe
         String slug = categoryDTO.getSlug();
         if (slug == null || slug.isBlank()) {
             slug = StringUtils.slugify(categoryDTO.getName());
         }
 
-        // Verificar slug único
-        if (existsBySlug(slug)) {
+        // existsBySlugIgnoreCase viene del método que definimos en el repositorio
+        if (categoryRepository.existsBySlugIgnoreCase(slug)) {
             throw new DuplicateEntityException("Category", "slug", slug);
         }
 
-        // Crear categoría
         Category category = categoryMapper.toEntity(categoryDTO);
-        category.setCategoryId(generateNextId());
+        // Ya no asignamos ID manualmente: JPA lo genera con @GeneratedValue
         category.setSlug(slug);
 
-        // Asignar parent si existe
         if (categoryDTO.getParentId() != null) {
             Category parent = findCategoryEntityOrThrow(categoryDTO.getParentId());
             category.setParent(parent);
         }
 
-        // TODO Etapa 06: categoryRepository.save(category);
-        categoriesInMemory.add(category);
-
-        return categoryMapper.toDTO(category);
+        // categoryRepository.save() persiste en la base de datos y devuelve
+        // la entidad con el ID generado asignado
+        Category saved = categoryRepository.save(category);
+        return categoryMapper.toDTO(saved);
     }
 
-    /**
-     * Actualiza una categoría existente.
-     *
-     * @param categoryId ID de la categoría
-     * @param categoryDTO Nuevos datos
-     * @return CategoryDTO actualizado
-     * @throws EntityNotFoundException si no existe
-     * @throws DuplicateEntityException si el nuevo slug ya existe
-     * @throws ValidationException si hay ciclo en jerarquía
-     */
+    @Transactional
     public CategoryDTO updateCategory(Long categoryId, CategoryDTO categoryDTO) {
         Category category = findCategoryEntityOrThrow(categoryId);
-
-        // Validaciones
         ValidationUtils.validateNotBlank(categoryDTO.getName(), "name");
 
-        // Generar slug si cambió el nombre
         String newSlug = categoryDTO.getSlug();
         if (newSlug == null || newSlug.isBlank()) {
             newSlug = StringUtils.slugify(categoryDTO.getName());
         }
 
-        // Verificar slug único si cambió
-        if (!category.getSlug().equals(newSlug) && existsBySlug(newSlug)) {
+        if (!category.getSlug().equalsIgnoreCase(newSlug) &&
+                categoryRepository.existsBySlugIgnoreCase(newSlug)) {
             throw new DuplicateEntityException("Category", "slug", newSlug);
         }
 
-        // Actualizar campos
         category.setName(categoryDTO.getName());
         category.setSlug(newSlug);
 
-        // Actualizar parent si cambió
         if (categoryDTO.getParentId() != null) {
-            // Validar que no sea su propio padre
             if (categoryDTO.getParentId().equals(categoryId)) {
                 throw new ValidationException("Category cannot be its own parent");
             }
-
             Category newParent = findCategoryEntityOrThrow(categoryDTO.getParentId());
-
-            // Validar que no cree ciclo
             if (wouldCreateCycle(category, newParent)) {
                 throw new ValidationException("Cannot create cycle in category hierarchy");
             }
-
             category.setParent(newParent);
         } else {
-            category.setParent(null); // Convertir en raíz
+            category.setParent(null);
         }
 
-        // TODO Etapa 06: categoryRepository.save(category);
-
-        return categoryMapper.toDTO(category);
+        // Dentro de una transacción activa, JPA detecta automáticamente los cambios
+        // en entidades "managed" (gestionadas) y hace el UPDATE al hacer flush.
+        // El save() explícito también funciona y es más claro para el lector.
+        Category saved = categoryRepository.save(category);
+        return categoryMapper.toDTO(saved);
     }
 
-    /**
-     * Elimina una categoría.
-     *
-     * @param categoryId ID de la categoría
-     * @throws EntityNotFoundException si no existe
-     * @throws ValidationException si tiene subcategorías o productos
-     */
+    @Transactional
     public void deleteCategory(Long categoryId) {
         Category category = findCategoryEntityOrThrow(categoryId);
 
-        // Validar que no tenga subcategorías
         if (category.getSubcategories() != null && !category.getSubcategories().isEmpty()) {
             throw new ValidationException("Cannot delete category with subcategories");
         }
-
-        // Validar que no tenga productos
         if (category.getProducts() != null && !category.getProducts().isEmpty()) {
             throw new ValidationException("Cannot delete category with products");
         }
 
-        // TODO Etapa 06: categoryRepository.delete(category);
-        categoriesInMemory.remove(category);
+        categoryRepository.delete(category);
     }
 
-    /**
-     * Busca categoría por ID.
-     *
-     * @param categoryId ID de la categoría
-     * @return CategoryDTO
-     * @throws EntityNotFoundException si no existe
-     */
     public CategoryDTO findById(Long categoryId) {
-        Category category = findCategoryEntityOrThrow(categoryId);
-        return categoryMapper.toDTO(category);
+        return categoryMapper.toDTO(findCategoryEntityOrThrow(categoryId));
     }
 
-    /**
-     * Busca categoría por slug.
-     *
-     * @param slug Slug de la categoría
-     * @return CategoryDTO
-     * @throws EntityNotFoundException si no existe
-     */
     public CategoryDTO findBySlug(String slug) {
-        // TODO Etapa 06: Category category = categoryRepository.findBySlug(slug)
-        Category category = categoriesInMemory.stream()
-                .filter(c -> c.getSlug().equalsIgnoreCase(slug))
-                .findFirst()
+        Category category = categoryRepository.findBySlugIgnoreCase(slug)
                 .orElseThrow(() -> new EntityNotFoundException("Category with slug: " + slug));
-
         return categoryMapper.toDTO(category);
     }
 
-    /**
-     * Lista todas las categorías.
-     *
-     * @return Lista de CategoryDTO
-     */
     public List<CategoryDTO> findAllCategories() {
-        // TODO Etapa 06: List<Category> categories = categoryRepository.findAll();
-        return categoryMapper.toDTOList(categoriesInMemory);
+        return categoryMapper.toDTOList(categoryRepository.findAll());
     }
 
-    /**
-     * Lista categorías raíz (sin padre).
-     *
-     * @return Lista de CategoryDTO
-     */
     public List<CategoryDTO> findRootCategories() {
-        // TODO Etapa 06: List<Category> roots = categoryRepository.findByParentIsNull();
-        List<Category> rootCategories = categoriesInMemory.stream()
-                .filter(Category::isRootCategory)
-                .collect(Collectors.toList());
-
-        return categoryMapper.toDTOList(rootCategories);
+        return categoryMapper.toDTOList(categoryRepository.findByParentIsNull());
     }
 
-    /**
-     * Lista subcategorías de una categoría.
-     *
-     * @param parentId ID de la categoría padre
-     * @return Lista de CategoryDTO
-     */
     public List<CategoryDTO> findSubcategories(Long parentId) {
-        Category parent = findCategoryEntityOrThrow(parentId);
-
-        // TODO Etapa 06: List<Category> subs = categoryRepository.findByParentId(parentId);
-        List<Category> subcategories = categoriesInMemory.stream()
-                .filter(c -> c.getParent() != null &&
-                           c.getParent().getCategoryId().equals(parentId))
-                .collect(Collectors.toList());
-
-        return categoryMapper.toDTOList(subcategories);
+        findCategoryEntityOrThrow(parentId); // Valida que el padre existe
+        return categoryMapper.toDTOList(categoryRepository.findByParentCategoryId(parentId));
     }
 
-    /**
-     * Agrega una subcategoría a una categoría (gestión bidireccional).
-     *
-     * @param parentId ID de la categoría padre
-     * @param subcategoryDTO Datos de la subcategoría
-     * @return CategoryDTO de la subcategoría creada
-     * @throws EntityNotFoundException si el padre no existe
-     * @throws DuplicateEntityException si el slug ya existe
-     */
+    @Transactional
     public CategoryDTO addSubcategory(Long parentId, CategoryDTO subcategoryDTO) {
         Category parent = findCategoryEntityOrThrow(parentId);
-
-        // Validaciones
         ValidationUtils.validateNotBlank(subcategoryDTO.getName(), "name");
 
-        // Generar slug
         String slug = subcategoryDTO.getSlug();
         if (slug == null || slug.isBlank()) {
             slug = StringUtils.slugify(subcategoryDTO.getName());
         }
-
-        if (existsBySlug(slug)) {
+        if (categoryRepository.existsBySlugIgnoreCase(slug)) {
             throw new DuplicateEntityException("Category", "slug", slug);
         }
 
-        // Crear subcategoría
         Category subcategory = categoryMapper.toEntity(subcategoryDTO);
-        subcategory.setCategoryId(generateNextId());
         subcategory.setSlug(slug);
+        subcategory.setParent(parent);
 
-        // Gestión bidireccional
-        parent.getSubcategories().add(subcategory);  // Agregar a colección
-        subcategory.setParent(parent);                // Establecer referencia
-
-        // TODO Etapa 06: categoryRepository.save(subcategory);
-        categoriesInMemory.add(subcategory);
-
-        return categoryMapper.toDTO(subcategory);
+        Category saved = categoryRepository.save(subcategory);
+        return categoryMapper.toDTO(saved);
     }
 
-    /**
-     * Remueve una subcategoría de su padre (gestión bidireccional).
-     *
-     * @param parentId ID de la categoría padre
-     * @param subcategoryId ID de la subcategoría
-     * @throws EntityNotFoundException si no existen
-     * @throws ValidationException si la subcategoría no pertenece al padre
-     */
-    public void removeSubcategory(Long parentId, Long subcategoryId) {
-        Category parent = findCategoryEntityOrThrow(parentId);
-        Category subcategory = findCategoryEntityOrThrow(subcategoryId);
-
-        // Validar que la subcategoría pertenezca al padre
-        if (subcategory.getParent() == null ||
-            !subcategory.getParent().getCategoryId().equals(parentId)) {
-            throw new ValidationException("Category is not a subcategory of specified parent");
-        }
-
-        // Gestión bidireccional
-        parent.getSubcategories().remove(subcategory);  // Remover de colección
-        subcategory.setParent(null);                     // Remover referencia (convertir en raíz)
-
-        // TODO Etapa 06: categoryRepository.save(subcategory);
+    public List<CategoryDTO> buildFullCategoryTree() {
+        List<Category> roots = categoryRepository.findByParentIsNull();
+        return categoryMapper.toDTOListWithHierarchy(roots);
     }
 
-    /**
-     * Construye árbol de categorías completo desde una categoría raíz.
-     *
-     * @param categoryId ID de la categoría raíz
-     * @return CategoryDTO con subcategorías anidadas
-     * @throws EntityNotFoundException si no existe
-     */
     public CategoryDTO buildCategoryTree(Long categoryId) {
         Category category = findCategoryEntityOrThrow(categoryId);
         return categoryMapper.toDTOWithHierarchy(category);
     }
 
-    /**
-     * Construye árbol completo de todas las categorías raíz.
-     *
-     * @return Lista de CategoryDTO con jerarquías completas
-     */
-    public List<CategoryDTO> buildFullCategoryTree() {
-        List<Category> rootCategories = categoriesInMemory.stream()
-                .filter(Category::isRootCategory)
-                .collect(Collectors.toList());
-
-        return categoryMapper.toDTOListWithHierarchy(rootCategories);
-    }
-
-    /**
-     * Verifica si existe una categoría con el slug dado.
-     *
-     * @param slug Slug a verificar
-     * @return true si existe
-     */
     public boolean existsBySlug(String slug) {
-        // TODO Etapa 06: return categoryRepository.existsBySlug(slug);
-        return categoriesInMemory.stream()
-                .anyMatch(c -> c.getSlug().equalsIgnoreCase(slug));
+        return categoryRepository.existsBySlugIgnoreCase(slug);
     }
 
-    /**
-     * Busca entity Category por ID o lanza excepción.
-     * Método interno para uso de otros servicios.
-     *
-     * @param categoryId ID de la categoría
-     * @return Category entity
-     * @throws EntityNotFoundException si no existe
-     */
+    // Método público porque ProductService también lo necesita para validar
+    // que una categoría existe antes de asignarla a un producto
     public Category findCategoryEntityOrThrow(Long categoryId) {
-        // TODO Etapa 06: return categoryRepository.findById(categoryId)
-        return categoriesInMemory.stream()
-                .filter(c -> c.getCategoryId().equals(categoryId))
-                .findFirst()
+        return categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new EntityNotFoundException("Category", categoryId));
     }
 
-    // Métodos privados auxiliares
-
-    /**
-     * Verifica si asignar newParent a category crearía un ciclo.
-     */
     private boolean wouldCreateCycle(Category category, Category newParent) {
         Category current = newParent;
         while (current != null) {
-            if (current.getCategoryId().equals(category.getCategoryId())) {
-                return true; // Ciclo detectado
-            }
+            if (current.getCategoryId().equals(category.getCategoryId())) return true;
             current = current.getParent();
         }
         return false;
-    }
-
-    // Método auxiliar para simular auto-increment
-    private Long generateNextId() {
-        return categoriesInMemory.stream()
-                .mapToLong(Category::getCategoryId)
-                .max()
-                .orElse(0L) + 1;
     }
 }
