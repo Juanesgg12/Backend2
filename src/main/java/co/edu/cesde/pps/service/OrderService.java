@@ -2,14 +2,15 @@ package co.edu.cesde.pps.service;
 
 import co.edu.cesde.pps.dto.OrderDTO;
 import co.edu.cesde.pps.enums.CartStatus;
-import co.edu.cesde.pps.exception.EntityNotFoundException;
-import co.edu.cesde.pps.exception.InsufficientStockException;
-import co.edu.cesde.pps.exception.InvalidCartStateException;
-import co.edu.cesde.pps.exception.ValidationException;
+import co.edu.cesde.pps.exception.*;
 import co.edu.cesde.pps.mapper.OrderMapper;
 import co.edu.cesde.pps.model.*;
+import co.edu.cesde.pps.repository.OrderRepository;
+import co.edu.cesde.pps.repository.OrderStatusRepository;
 import co.edu.cesde.pps.util.CalculationUtils;
 import co.edu.cesde.pps.config.AppConfig;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -19,108 +20,100 @@ import java.util.List;
 import java.util.Random;
 import java.util.stream.Collectors;
 
+@Service
+@Transactional(readOnly = true)
 public class OrderService {
 
     private final OrderMapper orderMapper;
+    private final OrderRepository orderRepository;
+    private final OrderStatusRepository orderStatusRepository;
     private final UserService userService;
     private final CartService cartService;
     private final AddressService addressService;
     private final ProductService productService;
-
-    private final List<Order> ordersInMemory;
     private final Random random;
 
-    public OrderService(UserService userService,
+    public OrderService(OrderRepository orderRepository,
+                        OrderStatusRepository orderStatusRepository,
+                        UserService userService,
                         CartService cartService,
                         AddressService addressService,
                         ProductService productService) {
         this.orderMapper = new OrderMapper();
+        this.orderRepository = orderRepository;
+        this.orderStatusRepository = orderStatusRepository;
         this.userService = userService;
         this.cartService = cartService;
         this.addressService = addressService;
         this.productService = productService;
-        this.ordersInMemory = new ArrayList<>();
         this.random = new Random();
     }
 
-    public OrderDTO checkout(Long userId,
-                             Long cartId,
-                             Long shippingAddressId,
-                             Long billingAddressId) {
+    @Transactional
+    public OrderDTO checkout(Long userId, Long cartId,
+                             Long shippingAddressId, Long billingAddressId) {
 
-        // 1. Validar usuario
         userService.findUserEntityOrThrow(userId);
 
-        // 2. Validar carrito
         Cart cart = cartService.findCartEntityOrThrow(cartId);
 
         if (cart.getStatus() != CartStatus.OPEN) {
-            throw new InvalidCartStateException(cartId, cart.getStatus(),
-                    CartStatus.OPEN, "checkout");
+            throw new InvalidCartStateException(
+                    cartId, cart.getStatus(), CartStatus.OPEN, "checkout");
         }
-
         if (cart.getItems() == null || cart.getItems().isEmpty()) {
             throw new ValidationException("Cannot checkout empty cart");
         }
-
-        if (cart.getUser() == null || !cart.getUser().getUserId().equals(userId)) {
+        if (cart.getUser() == null ||
+                !cart.getUser().getUserId().equals(userId)) {
             throw new ValidationException("Cart does not belong to user");
         }
 
-        // 3. Validar direcciones
         Address shippingAddress = addressService.findAddressEntityOrThrow(shippingAddressId);
-        Address billingAddress = addressService.findAddressEntityOrThrow(billingAddressId);
+        Address billingAddress  = addressService.findAddressEntityOrThrow(billingAddressId);
 
         if (!shippingAddress.getUser().getUserId().equals(userId)) {
             throw new ValidationException("Shipping address does not belong to user");
         }
-
         if (!billingAddress.getUser().getUserId().equals(userId)) {
             throw new ValidationException("Billing address does not belong to user");
         }
 
-        // 4. Validar stock
         for (CartItem item : cart.getItems()) {
-            Product product = item.getProduct();
-
-            if (!product.getIsActive()) {
+            Product p = item.getProduct();
+            if (!p.getIsActive()) {
                 throw new ValidationException(
-                        "Product '" + product.getName() + "' is no longer available");
+                        "Product '" + p.getName() + "' is no longer available");
             }
-
-            if (!CalculationUtils.hasEnoughStock(
-                    product.getStockQty(), item.getQuantity())) {
+            if (!CalculationUtils.hasEnoughStock(p.getStockQty(), item.getQuantity())) {
                 throw new InsufficientStockException(
-                        product.getProductId(),
-                        product.getSku(),
-                        item.getQuantity(),
-                        product.getStockQty());
+                        p.getProductId(), p.getSku(),
+                        item.getQuantity(), p.getStockQty());
             }
         }
 
-        // 5. Crear orden con Builder
-        String orderNumber = generateOrderNumber();
+        // Obtener el estado inicial de la orden desde la BD
+        // "PENDING" debe existir en la tabla order_status
+        OrderStatus pendingStatus = orderStatusRepository
+                .findByNameIgnoreCase("PENDING")
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "OrderStatus 'PENDING' not found in database"));
 
         Order order = Order.builder()
-                .orderId(generateNextId())
-                .orderNumber(orderNumber)
+                .orderNumber(generateOrderNumber())
                 .user(cart.getUser())
+                .orderStatus(pendingStatus)
                 .shippingAddress(shippingAddress)
                 .billingAddress(billingAddress)
                 .createdAt(LocalDateTime.now())
                 .items(new ArrayList<>())
                 .build();
 
-        // 6. Copiar items usando Builder
         for (CartItem cartItem : cart.getItems()) {
-
-            BigDecimal lineTotal =
-                    CalculationUtils.calculateOrderItemLineTotal(
-                            cartItem.getUnitPrice(),
-                            cartItem.getQuantity());
+            BigDecimal lineTotal = CalculationUtils.calculateOrderItemLineTotal(
+                    cartItem.getUnitPrice(), cartItem.getQuantity());
 
             OrderItem orderItem = OrderItem.builder()
-                    .orderItemId(generateNextOrderItemId())
                     .order(order)
                     .product(cartItem.getProduct())
                     .quantity(cartItem.getQuantity())
@@ -131,16 +124,15 @@ public class OrderService {
             order.getItems().add(orderItem);
         }
 
-        // 7. Calcular totales
         List<BigDecimal> lineTotals = order.getItems().stream()
                 .map(OrderItem::getLineTotal)
                 .collect(Collectors.toList());
 
-        BigDecimal subtotal = CalculationUtils.calculateOrderSubtotal(lineTotals);
-        BigDecimal taxRate = BigDecimal.valueOf(AppConfig.getDefaultTaxRate());
-        BigDecimal tax = CalculationUtils.calculateTax(subtotal, taxRate);
-        BigDecimal shippingCost = calculateShippingCost(subtotal);
-        BigDecimal total = CalculationUtils.calculateOrderTotal(
+        BigDecimal subtotal    = CalculationUtils.calculateOrderSubtotal(lineTotals);
+        BigDecimal tax         = CalculationUtils.calculateTax(
+                subtotal, BigDecimal.valueOf(AppConfig.getDefaultTaxRate()));
+        BigDecimal shippingCost = CalculationUtils.calculateShippingCost(subtotal, 1);
+        BigDecimal total       = CalculationUtils.calculateOrderTotal(
                 subtotal, tax, shippingCost);
 
         order.setSubtotal(subtotal);
@@ -148,20 +140,19 @@ public class OrderService {
         order.setShippingCost(shippingCost);
         order.setTotal(total);
 
-        // 8. Actualizar stock
+        // Descontar stock de cada producto
         for (CartItem item : cart.getItems()) {
             productService.decreaseStock(
-                    item.getProduct().getProductId(),
-                    item.getQuantity());
+                    item.getProduct().getProductId(), item.getQuantity());
         }
 
-        // 9. Marcar carrito como CONVERTED
+        // Marcar el carrito como convertido
         cart.setStatus(CartStatus.CONVERTED);
         cart.setUpdatedAt(LocalDateTime.now());
+        cartService.findCartEntityOrThrow(cartId); // Fuerza flush del cart
 
-        ordersInMemory.add(order);
-
-        return orderMapper.toDTO(order);
+        Order saved = orderRepository.save(order);
+        return orderMapper.toDTO(saved);
     }
 
     public OrderDTO findById(Long orderId) {
@@ -169,60 +160,27 @@ public class OrderService {
     }
 
     public OrderDTO findByOrderNumber(String orderNumber) {
-        Order order = ordersInMemory.stream()
-                .filter(o -> o.getOrderNumber().equalsIgnoreCase(orderNumber))
-                .findFirst()
-                .orElseThrow(() ->
-                        new EntityNotFoundException("Order with number: " + orderNumber));
-
+        Order order = orderRepository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Order with number: " + orderNumber));
         return orderMapper.toDTO(order);
     }
 
     public List<OrderDTO> findOrdersByUser(Long userId) {
         userService.findUserEntityOrThrow(userId);
-
-        List<Order> userOrders = ordersInMemory.stream()
-                .filter(o -> o.getUser() != null &&
-                        o.getUser().getUserId().equals(userId))
-                .collect(Collectors.toList());
-
-        return orderMapper.toDTOList(userOrders);
+        return orderMapper.toDTOList(orderRepository.findByUserUserId(userId));
     }
 
     public Order findOrderEntityOrThrow(Long orderId) {
-        return ordersInMemory.stream()
-                .filter(o -> o.getOrderId().equals(orderId))
-                .findFirst()
-                .orElseThrow(() ->
-                        new EntityNotFoundException("Order", orderId));
+        return orderRepository.findById(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("Order", orderId));
     }
 
-    public String generateOrderNumber() {
+    private String generateOrderNumber() {
         String prefix = AppConfig.getOrderNumberPrefix();
-        String date = LocalDateTime.now()
+        String date   = LocalDateTime.now()
                 .format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String randomPart =
-                String.format("%06d", random.nextInt(1000000));
-
-        return prefix + date + "-" + randomPart;
-    }
-
-    private BigDecimal calculateShippingCost(BigDecimal subtotal) {
-        return CalculationUtils.calculateShippingCost(subtotal, 1);
-    }
-
-    private Long generateNextId() {
-        return ordersInMemory.stream()
-                .mapToLong(Order::getOrderId)
-                .max()
-                .orElse(0L) + 1;
-    }
-
-    private Long generateNextOrderItemId() {
-        return ordersInMemory.stream()
-                .flatMap(order -> order.getItems().stream())
-                .mapToLong(OrderItem::getOrderItemId)
-                .max()
-                .orElse(0L) + 1;
+        String rand   = String.format("%06d", random.nextInt(1000000));
+        return prefix + date + "-" + rand;
     }
 }

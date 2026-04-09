@@ -2,56 +2,70 @@ package co.edu.cesde.pps.service;
 
 import co.edu.cesde.pps.dto.CartDTO;
 import co.edu.cesde.pps.enums.CartStatus;
-import co.edu.cesde.pps.exception.CartMergeException;
-import co.edu.cesde.pps.exception.EntityNotFoundException;
-import co.edu.cesde.pps.exception.InsufficientStockException;
-import co.edu.cesde.pps.exception.InvalidCartStateException;
-import co.edu.cesde.pps.exception.ValidationException;
+import co.edu.cesde.pps.exception.*;
 import co.edu.cesde.pps.mapper.CartMapper;
 import co.edu.cesde.pps.model.*;
+import co.edu.cesde.pps.repository.CartRepository;
+import co.edu.cesde.pps.repository.UserSesionRepository;
 import co.edu.cesde.pps.util.CalculationUtils;
 import co.edu.cesde.pps.util.ValidationUtils;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+@Service
+@Transactional(readOnly = true)
 public class CartService {
 
     private final CartMapper cartMapper;
+    private final CartRepository cartRepository;
+    private final UserSesionRepository userSesionRepository;
     private final UserService userService;
     private final ProductService productService;
-    private final List<Cart> cartsInMemory;
 
-    public CartService(UserService userService, ProductService productService) {
+    public CartService(CartRepository cartRepository,
+                       UserSesionRepository userSesionRepository,
+                       UserService userService,
+                       ProductService productService) {
         this.cartMapper = new CartMapper();
+        this.cartRepository = cartRepository;
+        this.userSesionRepository = userSesionRepository;
         this.userService = userService;
         this.productService = productService;
-        this.cartsInMemory = new ArrayList<>();
     }
 
+    // Crea un carrito para un invitado dado su sessionId (ya persistido en BD)
+    @Transactional
     public CartDTO createCartForGuest(Long sessionId) {
+        // La sesión debe existir en BD antes de crear el carrito
+        UserSession session = userSesionRepository.findById(sessionId)
+                .orElseThrow(() -> new EntityNotFoundException("UserSession", sessionId));
 
         Cart cart = Cart.builder()
-                .cartId(generateNextId())
-                .user(null)
+                .user(null)          // null = carrito de invitado
+                .session(session)
                 .status(CartStatus.OPEN)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .items(new ArrayList<>())
                 .build();
 
-        cartsInMemory.add(cart);
-        return cartMapper.toDTO(cart);
+        Cart saved = cartRepository.save(cart);
+        return cartMapper.toDTO(saved);
     }
 
+    @Transactional
     public CartDTO createCartForUser(Long userId) {
-
         User user = userService.findUserEntityOrThrow(userId);
 
+        // Reutilizar la sesión del usuario si tiene una activa,
+        // o crear una nueva. Por simplicidad, usamos la primera sesión del usuario.
+        // En etapa12 esto se gestionará desde AuthController con UserSession real.
         Cart cart = Cart.builder()
-                .cartId(generateNextId())
                 .user(user)
                 .status(CartStatus.OPEN)
                 .createdAt(LocalDateTime.now())
@@ -59,199 +73,214 @@ public class CartService {
                 .items(new ArrayList<>())
                 .build();
 
-        cartsInMemory.add(cart);
-        return cartMapper.toDTO(cart);
+        Cart saved = cartRepository.save(cart);
+        return cartMapper.toDTO(saved);
     }
 
     public CartDTO findById(Long cartId) {
         return cartMapper.toDTO(findCartEntityOrThrow(cartId));
     }
 
+    @Transactional
     public CartDTO addItem(Long cartId, Long productId, Integer quantity) {
-
         ValidationUtils.validatePositive(quantity, "quantity");
 
         Cart cart = findCartEntityOrThrow(cartId);
 
         if (cart.getStatus() != CartStatus.OPEN) {
-            throw new InvalidCartStateException(cartId, cart.getStatus(),
-                    CartStatus.OPEN, "add item");
+            throw new InvalidCartStateException(
+                    cartId, cart.getStatus(), CartStatus.OPEN, "add item");
         }
 
         Product product = productService.findProductEntityOrThrow(productId);
 
         if (!product.getIsActive()) {
-            throw new ValidationException("Product '" + product.getName() + "' is not active");
+            throw new ValidationException(
+                    "Product '" + product.getName() + "' is not active");
         }
 
         if (!CalculationUtils.hasEnoughStock(product.getStockQty(), quantity)) {
-            throw new InsufficientStockException(productId, product.getSku(),
-                    quantity, product.getStockQty());
+            throw new InsufficientStockException(
+                    productId, product.getSku(), quantity, product.getStockQty());
         }
 
+        // Buscar si el producto ya está en el carrito
         CartItem existingItem = cart.getItems().stream()
-                .filter(item -> item.getProduct().getProductId().equals(productId))
+                .filter(i -> i.getProduct().getProductId().equals(productId))
                 .findFirst()
                 .orElse(null);
 
         if (existingItem != null) {
-
             int newQuantity = existingItem.getQuantity() + quantity;
-
             if (!CalculationUtils.hasEnoughStock(product.getStockQty(), newQuantity)) {
-                throw new InsufficientStockException(productId, product.getSku(),
-                        newQuantity, product.getStockQty());
+                throw new InsufficientStockException(
+                        productId, product.getSku(), newQuantity, product.getStockQty());
             }
-
             existingItem.setQuantity(newQuantity);
-
         } else {
-
             CartItem newItem = CartItem.builder()
-                    .cartItemId(generateNextCartItemId())
                     .cart(cart)
                     .product(product)
                     .quantity(quantity)
                     .unitPrice(product.getPrice())
                     .addedAt(LocalDateTime.now())
                     .build();
-
+            // Al agregar a la colección con CascadeType.ALL,
+            // JPA persiste el CartItem automáticamente al guardar el Cart
             cart.getItems().add(newItem);
         }
 
-        touchCart(cart);
-        return cartMapper.toDTO(cart);
+        cart.setUpdatedAt(LocalDateTime.now());
+        Cart saved = cartRepository.save(cart);
+        return cartMapper.toDTO(saved);
     }
 
-    public CartDTO mergeGuestCartToUserCart(Long guestCartId, Long userId) {
+    @Transactional
+    public CartDTO updateItemQuantity(Long cartId, Long productId, Integer quantity) {
+        ValidationUtils.validatePositive(quantity, "quantity");
 
+        Cart cart = findCartEntityOrThrow(cartId);
+
+        if (cart.getStatus() != CartStatus.OPEN) {
+            throw new InvalidCartStateException(
+                    cartId, cart.getStatus(), CartStatus.OPEN, "update item");
+        }
+
+        CartItem item = cart.getItems().stream()
+                .filter(i -> i.getProduct().getProductId().equals(productId))
+                .findFirst()
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "CartItem for product " + productId));
+
+        Product product = item.getProduct();
+        if (!CalculationUtils.hasEnoughStock(product.getStockQty(), quantity)) {
+            throw new InsufficientStockException(
+                    productId, product.getSku(), quantity, product.getStockQty());
+        }
+
+        item.setQuantity(quantity);
+        cart.setUpdatedAt(LocalDateTime.now());
+        Cart saved = cartRepository.save(cart);
+        return cartMapper.toDTO(saved);
+    }
+
+    @Transactional
+    public CartDTO removeItem(Long cartId, Long productId) {
+        Cart cart = findCartEntityOrThrow(cartId);
+
+        if (cart.getStatus() != CartStatus.OPEN) {
+            throw new InvalidCartStateException(
+                    cartId, cart.getStatus(), CartStatus.OPEN, "remove item");
+        }
+
+        // removeIf con orphanRemoval=true en Cart elimina el CartItem de la BD
+        boolean removed = cart.getItems().removeIf(
+                i -> i.getProduct().getProductId().equals(productId));
+
+        if (!removed) {
+            throw new EntityNotFoundException("CartItem for product " + productId);
+        }
+
+        cart.setUpdatedAt(LocalDateTime.now());
+        Cart saved = cartRepository.save(cart);
+        return cartMapper.toDTO(saved);
+    }
+
+    @Transactional
+    public CartDTO clearCart(Long cartId) {
+        Cart cart = findCartEntityOrThrow(cartId);
+
+        if (cart.getStatus() != CartStatus.OPEN) {
+            throw new InvalidCartStateException(
+                    cartId, cart.getStatus(), CartStatus.OPEN, "clear");
+        }
+
+        // clear() + orphanRemoval=true → JPA borra todos los CartItems en BD
+        cart.getItems().clear();
+        cart.setUpdatedAt(LocalDateTime.now());
+        Cart saved = cartRepository.save(cart);
+        return cartMapper.toDTO(saved);
+    }
+
+    @Transactional
+    public CartDTO mergeGuestCartToUserCart(Long guestCartId, Long userId) {
         Cart guestCart = findCartEntityOrThrow(guestCartId);
         Cart userCart = findOrCreateOpenCartForUser(userId);
 
         if (guestCart.getStatus() != CartStatus.OPEN) {
-            throw new InvalidCartStateException(guestCartId,
-                    guestCart.getStatus(), CartStatus.OPEN, "merge");
+            throw new InvalidCartStateException(
+                    guestCartId, guestCart.getStatus(), CartStatus.OPEN, "merge");
         }
-
-        if (userCart.getStatus() != CartStatus.OPEN) {
-            throw new InvalidCartStateException(userCart.getCartId(),
-                    userCart.getStatus(), CartStatus.OPEN, "merge");
-        }
-
         if (guestCart.getUser() != null) {
             throw new CartMergeException(guestCartId, userCart.getCartId(),
                     "Guest cart already has a user assigned");
         }
 
         for (CartItem guestItem : new ArrayList<>(guestCart.getItems())) {
-
             Product product = guestItem.getProduct();
-            Integer guestQuantity = guestItem.getQuantity();
+            Integer guestQty = guestItem.getQuantity();
 
             CartItem userItem = userCart.getItems().stream()
-                    .filter(item -> item.getProduct().getProductId()
+                    .filter(i -> i.getProduct().getProductId()
                             .equals(product.getProductId()))
                     .findFirst()
                     .orElse(null);
 
             if (userItem != null) {
-
-                int totalQuantity = userItem.getQuantity() + guestQuantity;
-
-                if (!CalculationUtils.hasEnoughStock(product.getStockQty(), totalQuantity)) {
-                    throw new InsufficientStockException(product.getProductId(),
-                            product.getSku(), totalQuantity, product.getStockQty());
+                int totalQty = userItem.getQuantity() + guestQty;
+                if (!CalculationUtils.hasEnoughStock(product.getStockQty(), totalQty)) {
+                    throw new InsufficientStockException(
+                            product.getProductId(), product.getSku(),
+                            totalQty, product.getStockQty());
                 }
-
-                userItem.setQuantity(totalQuantity);
-
+                userItem.setQuantity(totalQty);
                 if (guestItem.getAddedAt().isAfter(userItem.getAddedAt())) {
                     userItem.setUnitPrice(guestItem.getUnitPrice());
                 }
-
             } else {
-
-                if (!CalculationUtils.hasEnoughStock(product.getStockQty(), guestQuantity)) {
-                    throw new InsufficientStockException(product.getProductId(),
-                            product.getSku(), guestQuantity, product.getStockQty());
-                }
-
                 CartItem newItem = CartItem.builder()
-                        .cartItemId(generateNextCartItemId())
                         .cart(userCart)
                         .product(product)
-                        .quantity(guestQuantity)
+                        .quantity(guestQty)
                         .unitPrice(guestItem.getUnitPrice())
                         .addedAt(guestItem.getAddedAt())
                         .build();
-
                 userCart.getItems().add(newItem);
             }
         }
 
         guestCart.setStatus(CartStatus.ABANDONED);
-        touchCart(guestCart);
-        touchCart(userCart);
+        guestCart.setUpdatedAt(LocalDateTime.now());
+        userCart.setUpdatedAt(LocalDateTime.now());
 
-        return cartMapper.toDTO(userCart);
+        cartRepository.save(guestCart);
+        Cart saved = cartRepository.save(userCart);
+        return cartMapper.toDTO(saved);
     }
 
     public BigDecimal calculateCartTotal(Long cartId) {
-        Cart cart = findCartEntityOrThrow(cartId);
-        return cart.calculateTotal();
+        return findCartEntityOrThrow(cartId).calculateTotal();
     }
 
     public Cart findCartEntityOrThrow(Long cartId) {
-        return cartsInMemory.stream()
-                .filter(c -> c.getCartId().equals(cartId))
-                .findFirst()
+        return cartRepository.findById(cartId)
                 .orElseThrow(() -> new EntityNotFoundException("Cart", cartId));
     }
 
+    // Busca el carrito abierto del usuario, o crea uno nuevo si no tiene
     private Cart findOrCreateOpenCartForUser(Long userId) {
-
-        User user = userService.findUserEntityOrThrow(userId);
-
-        Cart cart = cartsInMemory.stream()
-                .filter(c -> c.getUser() != null &&
-                        c.getUser().getUserId().equals(userId) &&
-                        c.getStatus() == CartStatus.OPEN)
-                .findFirst()
-                .orElse(null);
-
-        if (cart == null) {
-
-            cart = Cart.builder()
-                    .cartId(generateNextId())
-                    .user(user)
-                    .status(CartStatus.OPEN)
-                    .createdAt(LocalDateTime.now())
-                    .updatedAt(LocalDateTime.now())
-                    .items(new ArrayList<>())
-                    .build();
-
-            cartsInMemory.add(cart);
-        }
-
-        return cart;
-    }
-
-    private void touchCart(Cart cart) {
-        cart.setUpdatedAt(LocalDateTime.now());
-    }
-
-    private Long generateNextId() {
-        return cartsInMemory.stream()
-                .mapToLong(Cart::getCartId)
-                .max()
-                .orElse(0L) + 1;
-    }
-
-    private Long generateNextCartItemId() {
-        return cartsInMemory.stream()
-                .flatMap(cart -> cart.getItems().stream())
-                .mapToLong(CartItem::getCartItemId)
-                .max()
-                .orElse(0L) + 1;
+        return cartRepository
+                .findByUserUserIdAndStatus(userId, CartStatus.OPEN)
+                .orElseGet(() -> {
+                    User user = userService.findUserEntityOrThrow(userId);
+                    Cart newCart = Cart.builder()
+                            .user(user)
+                            .status(CartStatus.OPEN)
+                            .createdAt(LocalDateTime.now())
+                            .updatedAt(LocalDateTime.now())
+                            .items(new ArrayList<>())
+                            .build();
+                    return cartRepository.save(newCart);
+                });
     }
 }
